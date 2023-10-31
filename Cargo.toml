@@ -1,0 +1,14 @@
+[package]
+name = "cgolrs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8.5"
+getopts = "0.2"
+regex = "1.10.2"
+crossterm = "0.27.0"
+
+[profile.release]
+debug = true
+lto = true
