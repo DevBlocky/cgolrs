@@ -1,16 +1,14 @@
-use std::{
-    io,
-    thread,
-    time::Instant,
-};
+use std::{io, thread};
 
 mod console;
 mod enc;
 mod engine;
 mod options;
 mod pos;
+mod stats;
 
 use pos::Pos2;
+use stats::Recorder;
 
 fn args_to_alive(args: &options::Args) -> Vec<Pos2> {
     if let Some(file_name) = args.input_file() {
@@ -45,43 +43,30 @@ fn main() -> io::Result<()> {
 
     // setup the engine and reporting metrics
     let mut game = engine::GameOfLife::from_alive(alive);
-    let sleep = args.sleep();
-    let mut total_gens = 0;
-    let mut report_gens = 0;
-    let mut last_report = Instant::now();
-
     let mut console = if args.console() {
         Some(console::ConsoleRender::new()?)
     } else {
         None
     };
+    let sleep = args.sleep();
+
+    // let mut stats = stats::CsvRecord::new(game.alive_count());
+    let mut stats = stats::CsvRecord::new(game.alive_count());
     'generations: for _ in 0..args.generations() {
         // render the console if in console mode
         if let Some(ref mut console) = console {
             while let Some(cmd) = console.poll_events()? {
                 match cmd {
                     console::ConsoleCommand::Exit => break 'generations,
-                    _ => {},
+                    _ => {}
                 }
             }
             console.render(&game)?;
         }
 
         // report metrics every 500ms or always if in console mode
-        if last_report.elapsed().as_millis() >= 500 || console.is_some() {
-            total_gens += report_gens;
-
-            // calculate gens/sec and reset reporting numbers
-            let gens_per_sec = report_gens as f64 / last_report.elapsed().as_secs_f64();
-            report_gens = 0;
-            last_report = Instant::now();
-
-            let report = format!(
-                "{:.02}gen/s gens:{}, alive:{}",
-                gens_per_sec,
-                total_gens,
-                game.alive_count()
-            );
+        if stats.has_report(console.is_some()) {
+            let report = stats.report();
             if let Some(ref mut console) = console {
                 console.set_report(report);
             } else {
@@ -91,7 +76,7 @@ fn main() -> io::Result<()> {
 
         // compute the next generation
         game.next_generation();
-        report_gens += 1;
+        stats.record(game.alive_count());
         if let Some(time) = sleep {
             thread::sleep(time);
         }

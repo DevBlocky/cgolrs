@@ -1,3 +1,5 @@
 /target
 /.vscode
+/.ipynb_checkpoints
 flamegraph.svg
+perf.csv
