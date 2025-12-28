@@ -1,24 +1,5 @@
 use crate::pos::Pos2;
 
-/// Helper function for selecting a minimum wrapped within an Option
-///
-/// Unlike `<Option as Ord>::min`, this function will not use [`None`] as a minimum.
-/// Instead it prioritizes [`Some`] values, only doing a comparison if both parameters are [`Some`]
-///
-/// # Example
-/// ```rust
-/// use std::cmp::Ord;
-///
-/// assert_eq!(Ord::min(&Some(1), &None), None);
-/// assert_eq!(safe_option_min(Some(1), None), Some(1)); // Some(1) is prioritized
-/// ```
-fn safe_option_min<T: std::cmp::Ord + Copy>(a: Option<T>, b: Option<T>) -> Option<T> {
-    match (a, b) {
-        (Some(a), Some(b)) => Some(a.min(b)),
-        _ => a.or(b),
-    }
-}
-
 /// A cursor over a slice of ordered (not strictly sequential) [`Pos2`]s
 ///
 /// [`PosCursor`] acts as a sort of grid iterator, where each position in the
@@ -64,11 +45,9 @@ impl<'a> PosCursor<'a> {
         self.buffer <<= 1;
         self.cursor.x += 1;
 
-        if let Some(&next) = self.slice.get(self.next_idx) {
-            if next == self.cursor {
-                self.next_idx += 1;
-                self.buffer |= 1;
-            }
+        if self.slice.get(self.next_idx) == Some(&self.cursor) {
+            self.next_idx += 1;
+            self.buffer |= 1;
         }
         self.buffer
     }
@@ -86,7 +65,7 @@ impl<'a> PosCursor<'a> {
             Some(&next) if self.cursor <= cursor && next > cursor => self.next_idx,
             // if the cursor is the next position, only increment the idx
             Some(&next) if next == cursor => self.next_idx + 1,
-            // we have no clue what the next idx could be, so just binary search tha john
+            // we have no clue what the next idx could be, so just binary search tha jawn
             _ => match self.slice.binary_search(&cursor) {
                 Ok(i) => i + 1, // +1 because we want the _next_ index from the cursor
                 Err(i) => i,
@@ -171,10 +150,7 @@ impl<'a> MultiRowPosCursor<'a> {
             .collect();
         let buffers = cursors.iter().map(PosCursor::bit_buffer).collect();
 
-        Self {
-            cursors,
-            buffers,
-        }
+        Self { cursors, buffers }
     }
 
     #[inline]
@@ -190,13 +166,12 @@ impl<'a> MultiRowPosCursor<'a> {
     }
 
     pub fn seek_closest(&mut self) -> Option<&[u8]> {
-        // fold all cursors into the closest present position
+        // find the next closest present position over all cursors
         let closest_next = Self::offset_iter(self.cursors.len())
             .zip(self.cursors.iter())
-            .fold(None, |acc, (offset, cursor)| {
-                let close_seek = cursor.next_present().map(|present| present - offset);
-                safe_option_min(acc, close_seek)
-            })?;
+            .map(|(offset, cursor)| cursor.next_present().map(|present| present - offset))
+            .flatten()
+            .min()?;
 
         // seek to the closest next position for every cursor and store the bit buffer
         for (i, (offset, cursor)) in Self::offset_iter(self.cursors.len())

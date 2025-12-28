@@ -77,7 +77,7 @@ impl Args {
 
         let f = self.fill();
         match f.as_deref().unwrap_or("random") {
-            "random" => rand::thread_rng().gen_bool(0.5),
+            "random" => rand::rng().random_bool(0.5),
             "alternating" => (x + y) % 2 == 0,
             "all" => true,
             "empty" => false,

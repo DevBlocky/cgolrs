@@ -1,13 +1,13 @@
 [package]
 name = "cgolrs"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-rand = "0.8.5"
-getopts = "0.2"
-regex = "1.10.2"
-crossterm = "0.27.0"
+rand = "0.9.2"
+getopts = "0.2.24"
+regex = "1.12.2"
+crossterm = "0.29.0"
 
 [profile.release]
 lto = true

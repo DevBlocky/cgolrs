@@ -3,3 +3,4 @@
 /.ipynb_checkpoints
 flamegraph.svg
 perf.csv
+.DS_Store
