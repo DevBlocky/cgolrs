@@ -49,6 +49,7 @@ fn main() -> io::Result<()> {
         None
     };
     let sleep = args.sleep();
+    let threads = args.threads();
 
     // let mut stats = stats::CsvRecord::new(game.alive_count());
     let mut stats = stats::CsvRecord::new(game.alive_count());
@@ -75,7 +76,11 @@ fn main() -> io::Result<()> {
         }
 
         // compute the next generation
-        game.next_generation();
+        if threads > 1 {
+            game.next_generation_parallel(threads);
+        } else {
+            game.next_generation();
+        }
         stats.record(game.alive_count());
         if let Some(time) = sleep {
             thread::sleep(time);

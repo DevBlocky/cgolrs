@@ -14,6 +14,7 @@ impl Args {
         opts.optopt("w", "width", "set grid width", "WIDTH");
         opts.optopt("h", "height", "set grid height", "HEIGHT");
         opts.optopt("f", "fill", "set fill type", "TYPE");
+        opts.optopt("t", "threads", "number of worker threads", "COUNT");
         opts.optopt(
             "s",
             "sleep",
@@ -56,6 +57,16 @@ impl Args {
             Some(millis) => Some(Duration::from_millis(millis)),
             None if self.console() => Some(Duration::from_millis(100)),
             None => None,
+        }
+    }
+    pub fn threads(&self) -> usize {
+        let auto_threads = std::thread::available_parallelism()
+            .map(|value| value.get())
+            .unwrap_or(1);
+        match self.matches.opt_get("threads").unwrap() {
+            Some(0) => auto_threads,
+            Some(value) => value,
+            None => 1,
         }
     }
 

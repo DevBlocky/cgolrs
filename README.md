@@ -16,9 +16,9 @@ Parallel Row Cursors come in as a game-changer in this context. Although the cel
 
 To see the implementation of the parallel cursors, check out [`crate::engine::scan`](https://github.com/DevBlocky/cgolrs/blob/main/src/engine/scan.rs).
 
-### Mutli-threading
+### Multi-threading
 
-With the foundation laid by the current architecture, introducing multithreading is a straightforward next step. Since this implementation is only single-threaded, partitioning the grid by rows and assigning each segment to a separate thread would drastically increase the speed of computation. Maybe I'll revisit this in the future to add this.
+The simulation can run across multiple worker threads. Use `-t/--threads` to control the thread count (defaults to 1; use `-t 0` for auto).
 
 ## Installation
 
