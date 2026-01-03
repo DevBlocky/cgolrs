@@ -165,7 +165,7 @@ impl<'a> MultiRowPosCursor<'a> {
         self.buffers()
     }
 
-    pub fn seek(&mut self, pos: Pos2) -> Option<&[u8]> {
+    pub fn seek(&mut self, pos: Pos2) -> &[u8] {
         // seek to the closest next position for every cursor and store the bit buffer
         for (i, (offset, cursor)) in Self::offset_iter(self.cursors.len())
             .zip(self.cursors.iter_mut())
@@ -173,7 +173,7 @@ impl<'a> MultiRowPosCursor<'a> {
         {
             self.buffers[i] = cursor.seek(pos + offset);
         }
-        Some(self.buffers())
+        self.buffers()
     }
     pub fn seek_closest(&mut self) -> Option<&[u8]> {
         // find the next closest present position over all cursors
@@ -182,7 +182,7 @@ impl<'a> MultiRowPosCursor<'a> {
             .map(|(offset, cursor)| cursor.next_present().map(|present| present - offset))
             .flatten()
             .min()?;
-        self.seek(closest_next)
+        Some(self.seek(closest_next))
     }
 
     /// Returns the cursor position of the bottom most cursor

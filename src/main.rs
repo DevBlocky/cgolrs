@@ -49,9 +49,8 @@ fn main() -> io::Result<()> {
         None
     };
     let sleep = args.sleep();
-    let threads = args.threads();
+    let parallel = args.multithreading();
 
-    // let mut stats = stats::CsvRecord::new(game.alive_count());
     let mut stats = stats::CsvRecord::new(game.alive_count());
     'generations: for _ in 0..args.generations() {
         // render the console if in console mode
@@ -76,8 +75,8 @@ fn main() -> io::Result<()> {
         }
 
         // compute the next generation
-        if threads > 1 {
-            game.next_generation_parallel(threads);
+        if parallel {
+            game.next_generation_parallel();
         } else {
             game.next_generation();
         }

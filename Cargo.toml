@@ -11,4 +11,5 @@ crossterm = "0.29.0"
 rayon = "1.10.0"
 
 [profile.release]
+debug = true
 lto = true

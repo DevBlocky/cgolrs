@@ -7,9 +7,6 @@ pub use self::window::GameEngineWindow;
 use crate::Pos2;
 use rayon::prelude::*;
 use std::ops::Range;
-use std::sync::OnceLock;
-
-static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct GameOfLife {
@@ -36,28 +33,20 @@ impl GameOfLife {
         self.alive = next;
     }
 
-    pub fn next_generation_parallel(&mut self, threads: usize) {
+    pub fn next_generation_parallel(&mut self) {
         if self.alive.is_empty() {
             return;
         }
 
-        let threads = threads.max(1);
-        let pool = POOL.get_or_init(|| {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build()
-                .expect("build rayon thread pool")
-        });
-
-        let alive_slice = self.alive.as_slice();
-        let band_outputs: Vec<Vec<Pos2>> = pool.install(|| {
-            NextGenBand::create_bands(alive_slice, threads)
+        // use rayon to collect the outputs of each NextGenBand, which combined
+        // results in the next generation (see merge step below)
+        let band_outputs: Vec<Vec<Pos2>> =
+            NextGenBand::create_bands(&self.alive, rayon::current_num_threads())
                 .into_par_iter()
                 .map(|band_iter| band_iter.collect())
-                .collect()
-        });
+                .collect();
 
-        // merge all band_outputs together
+        // merge all NextGenBand outputs together
         // they may (probably) have duplicate values too
         let total_len: usize = band_outputs.iter().map(Vec::len).sum();
         let mut next = Vec::with_capacity(total_len);
@@ -72,8 +61,6 @@ impl GameOfLife {
             next.extend_from_slice(&output[start..]);
         }
 
-        // self.next_generation();
-        // assert!(next == self.alive);
         self.alive = next;
     }
 
@@ -168,9 +155,6 @@ impl<'a> NextGenBand<'a> {
         for i in 0..n {
             let size = base + usize::from(i < remainder);
             let end = start + size;
-            if start >= end {
-                break;
-            }
             bands.push(Self::new(slice, start..end));
             start = end;
         }

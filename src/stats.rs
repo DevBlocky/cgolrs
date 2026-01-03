@@ -93,7 +93,7 @@ impl Drop for CsvRecord {
         let file = fs::File::create("perf.csv").expect("create perf.csv");
         let mut file = io::BufWriter::new(file);
 
-        file.write_all(b"gen,delta_t,alive").unwrap();
+        file.write_all(b"gen,delta_t,alive\n").unwrap();
         for (i, (delta, alive)) in self.data.iter().enumerate() {
             let line = format!("{},{},{}\n", i, delta, alive);
             file.write_all(line.as_bytes()).unwrap();

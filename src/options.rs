@@ -9,12 +9,12 @@ impl Args {
         let mut opts = getopts::Options::new();
         opts.optflag("", "help", "print this help menu");
         opts.optflag("c", "console", "run in console mode");
+        opts.optflag("t", "threads", "enables multi-threading");
         opts.optopt("o", "output", "output file", "FILE");
         opts.optopt("i", "input", "input file", "FILE");
         opts.optopt("w", "width", "set grid width", "WIDTH");
         opts.optopt("h", "height", "set grid height", "HEIGHT");
         opts.optopt("f", "fill", "set fill type", "TYPE");
-        opts.optopt("t", "threads", "number of worker threads", "COUNT");
         opts.optopt(
             "s",
             "sleep",
@@ -49,6 +49,10 @@ impl Args {
     pub fn console(&self) -> bool {
         self.matches.opt_present("console")
     }
+    pub fn multithreading(&self) -> bool {
+        self.matches.opt_present("threads")
+    }
+
     pub fn generations(&self) -> usize {
         self.matches.opt_get("gens").unwrap().unwrap_or(usize::MAX) // kinda hacky way of saying "infinity"
     }
@@ -57,16 +61,6 @@ impl Args {
             Some(millis) => Some(Duration::from_millis(millis)),
             None if self.console() => Some(Duration::from_millis(100)),
             None => None,
-        }
-    }
-    pub fn threads(&self) -> usize {
-        let auto_threads = std::thread::available_parallelism()
-            .map(|value| value.get())
-            .unwrap_or(1);
-        match self.matches.opt_get("threads").unwrap() {
-            Some(0) => auto_threads,
-            Some(value) => value,
-            None => 1,
         }
     }
 
