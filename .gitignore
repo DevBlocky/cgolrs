@@ -2,5 +2,5 @@
 /.vscode
 /.ipynb_checkpoints
 flamegraph.svg
-perf.csv
+perf*.csv
 .DS_Store
