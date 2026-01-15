@@ -37,30 +37,12 @@ impl GameOfLife {
         if self.alive.is_empty() {
             return;
         }
-
-        // use rayon to collect the outputs of each NextGenBand, which combined
-        // results in the next generation (see merge step below)
-        let band_outputs: Vec<Vec<Pos2>> =
-            NextGenBand::create_bands(&self.alive, rayon::current_num_threads())
-                .into_par_iter()
-                .map(|band_iter| band_iter.collect())
-                .collect();
-
-        // merge all NextGenBand outputs together
-        // they may (probably) have duplicate values too
-        let total_len: usize = band_outputs.iter().map(Vec::len).sum();
-        let mut next = Vec::with_capacity(total_len);
-        for output in band_outputs {
-            if output.is_empty() {
-                continue;
-            }
-            let start = match next.last() {
-                Some(&last) => output.partition_point(|&pos| pos <= last),
-                None => 0,
-            };
-            next.extend_from_slice(&output[start..]);
-        }
-
+        let next = StripedNextGen::new(&self.alive).compute();
+        // verify integrity of next generation
+        debug_assert!(
+            next.windows(2).all(|w| w[0] < w[1]),
+            "output is not properly sorted"
+        );
         self.alive = next;
     }
 
@@ -140,27 +122,7 @@ struct NextGenBand<'a> {
     inner: NextGen<'a>,
     last_pos: Pos2,
 }
-
 impl<'a> NextGenBand<'a> {
-    fn create_bands(slice: &'a [Pos2], n: usize) -> Vec<NextGenBand<'a>> {
-        if slice.is_empty() || n == 0 {
-            return Vec::new();
-        }
-
-        let n = n.min(slice.len());
-        let base = slice.len() / n;
-        let remainder = slice.len() % n;
-        let mut bands = Vec::with_capacity(n);
-        let mut start = 0;
-        for i in 0..n {
-            let size = base + usize::from(i < remainder);
-            let end = start + size;
-            bands.push(Self::new(slice, start..end));
-            start = end;
-        }
-        bands
-    }
-
     fn new(slice: &'a [Pos2], rng: Range<usize>) -> Self {
         let first_pos = slice[rng.start] - Pos2::one(); // top left of rng.start
         let last_pos = slice[rng.end - 1] + Pos2::one(); // bottom right of rng.end
@@ -171,7 +133,6 @@ impl<'a> NextGenBand<'a> {
         Self { inner, last_pos }
     }
 }
-
 impl Iterator for NextGenBand<'_> {
     type Item = Pos2;
 
@@ -183,6 +144,61 @@ impl Iterator for NextGenBand<'_> {
             return Some(pos);
         }
         None
+    }
+}
+
+struct StripedNextGen<'a> {
+    bands: Vec<NextGenBand<'a>>,
+}
+impl<'a> StripedNextGen<'a> {
+    fn new(slice: &'a [Pos2]) -> Self {
+        Self::with_bands(slice, rayon::current_num_threads())
+    }
+    fn with_bands(slice: &'a [Pos2], n: usize) -> Self {
+        if slice.is_empty() || n == 0 {
+            return Self { bands: Vec::new() };
+        }
+
+        let n = n.min(slice.len());
+        let base = slice.len() / n;
+        let remainder = slice.len() % n;
+        let mut bands = Vec::with_capacity(n);
+        let mut start = 0;
+        for i in 0..n {
+            let size = base + usize::from(i < remainder);
+            let end = start + size;
+            bands.push(NextGenBand::new(slice, start..end));
+            start = end;
+        }
+
+        Self { bands }
+    }
+
+    fn compute(self) -> Vec<Pos2> {
+        // use rayon to collect the outputs of each NextGenBand, which combined
+        // results in the next generation (see merge step below)
+        let alive_bands: Vec<Vec<Pos2>> = self
+            .bands
+            .into_par_iter()
+            .map(|band| band.collect())
+            .collect();
+
+        // merge all NextGenBand outputs together
+        // they may (probably) have duplicate values too
+        let total_len: usize = alive_bands.iter().map(Vec::len).sum();
+        let mut alive = Vec::with_capacity(total_len);
+        for output in alive_bands {
+            if output.is_empty() {
+                continue;
+            }
+            let start = match alive.last() {
+                Some(&last) => output.partition_point(|&pos| pos <= last),
+                None => 0,
+            };
+            alive.extend_from_slice(&output[start..]);
+        }
+
+        alive
     }
 }
 
@@ -254,5 +270,59 @@ mod tests {
         let collected: Vec<Pos2> = window.iter().copied().collect();
 
         assert_eq!(collected, vec![pos(0, 0), pos(1, 1)]);
+    }
+
+    #[test]
+    fn striped_handles_small_inputs() {
+        let empty: Vec<Pos2> = Vec::new();
+        let one = sorted(vec![pos(0, 0)]);
+        let two = sorted(vec![pos(0, 0), pos(1, 0)]);
+
+        let empty_next = StripedNextGen::with_bands(&empty, 8).compute();
+        let one_next = StripedNextGen::with_bands(&one, 8).compute();
+        let two_next = StripedNextGen::with_bands(&two, 8).compute();
+
+        assert_eq!(empty_next, Vec::<Pos2>::new());
+        assert_eq!(one_next, NextGen::new(&one).collect::<Vec<_>>());
+        assert_eq!(two_next, NextGen::new(&two).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn striped_band_boundary_matches_serial() {
+        let alive = sorted(vec![
+            pos(0, 0),
+            pos(1, 0),
+            pos(2, 0),
+            pos(0, 1),
+            pos(2, 1),
+        ]);
+        let serial = NextGen::new(&alive).collect::<Vec<_>>();
+        let striped = StripedNextGen::with_bands(&alive, 2).compute();
+
+        assert_eq!(serial, striped);
+    }
+
+    #[test]
+    fn striped_randomized_matches_serial() {
+        fn pseudo_positions(seed: u32, count: usize) -> Vec<Pos2> {
+            let mut value = seed;
+            let mut out = Vec::with_capacity(count);
+            for _ in 0..count {
+                value = value.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let x = ((value >> 16) % 41) as i32 - 20;
+                value = value.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let y = ((value >> 16) % 41) as i32 - 20;
+                out.push(Pos2 { x, y });
+            }
+            out
+        }
+
+        for seed in 1..=8 {
+            let alive = sorted(pseudo_positions(seed, 64));
+            let serial = NextGen::new(&alive).collect::<Vec<_>>();
+            let striped = StripedNextGen::with_bands(&alive, 4).compute();
+
+            assert_eq!(serial, striped, "seed {seed} failed");
+        }
     }
 }
