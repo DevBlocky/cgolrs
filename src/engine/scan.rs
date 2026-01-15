@@ -98,7 +98,7 @@ impl<'a> PosCursor<'a> {
     ///
     /// Each bit represents whether the position is present in the slice.
     /// The state can be determined by a little bit math:
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// let buffer = cursor.bit_buffer();
     /// let state1 = buffer & (1 << 0) != 0; // this is the state at the cursor
     /// let state2 = buffer & (1 << 1) != 0; // this is the state right behind the cursor
@@ -200,5 +200,90 @@ impl<'a> std::fmt::Display for MultiRowPosCursor<'a> {
             write!(f, "{:08b} ", pc.bit_buffer())?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pos::Pos2;
+
+    fn pos(x: i32, y: i32) -> Pos2 {
+        Pos2 { x, y }
+    }
+
+    fn sorted(mut positions: Vec<Pos2>) -> Vec<Pos2> {
+        positions.sort();
+        positions.dedup();
+        positions
+    }
+
+    #[test]
+    fn pos_cursor_tracks_bit_buffer() {
+        let slice = sorted(vec![pos(0, 0), pos(2, 0), pos(1, 1)]);
+        let mut cursor = PosCursor::new(&slice, pos(0, 0));
+
+        assert_eq!(cursor.bit_buffer(), 0b1);
+        assert_eq!(cursor.next_present(), Some(pos(2, 0)));
+
+        let buffer = cursor.next();
+        assert_eq!(buffer, 0b10);
+        assert_eq!(cursor.cursor(), pos(1, 0));
+        assert_eq!(cursor.next_present(), Some(pos(2, 0)));
+
+        let buffer = cursor.next();
+        assert_eq!(buffer, 0b101);
+        assert_eq!(cursor.cursor(), pos(2, 0));
+        assert_eq!(cursor.next_present(), Some(pos(1, 1)));
+
+        let buffer = cursor.seek(pos(0, 1));
+        assert_eq!(buffer, 0);
+        assert_eq!(cursor.cursor(), pos(0, 1));
+    }
+
+    #[test]
+    fn multi_row_seek_closest_advances() {
+        let slice = sorted(vec![pos(0, 0), pos(2, 0), pos(1, 1)]);
+        let mut cursor = MultiRowPosCursor::new(&slice, 1);
+
+        assert_eq!(cursor.cursor(), pos(0, 0));
+
+        cursor.seek_closest().expect("closest seek");
+        assert_eq!(cursor.cursor(), pos(2, 0));
+
+        cursor.seek_closest().expect("closest seek");
+        assert_eq!(cursor.cursor(), pos(1, 1));
+    }
+
+    #[test]
+    fn multi_row_buffers_update_on_next() {
+        let slice = sorted(vec![pos(0, 0), pos(1, 0), pos(0, 1)]);
+        let mut cursor = MultiRowPosCursor::new(&slice, 2);
+
+        cursor.seek(pos(0, 1));
+        assert_eq!(cursor.buffers(), &[0b1, 0b1]);
+
+        cursor.next();
+        assert_eq!(cursor.buffers(), &[0b11, 0b10]);
+    }
+
+    #[test]
+    fn multi_row_seek_closest_empty_slice_is_none() {
+        let slice: Vec<Pos2> = Vec::new();
+        let mut cursor = MultiRowPosCursor::new(&slice, 3);
+
+        assert_eq!(cursor.buffers(), &[0, 0, 0]);
+        assert!(cursor.seek_closest().is_none());
+    }
+
+    #[test]
+    fn pos_cursor_seek_between_positions() {
+        let slice = sorted(vec![pos(0, 0), pos(2, 0), pos(1, 1)]);
+        let mut cursor = PosCursor::new(&slice, pos(0, 0));
+
+        let buffer = cursor.seek(pos(1, 0));
+        assert_eq!(buffer, 0b10);
+        assert_eq!(cursor.next_present(), Some(pos(2, 0)));
+        assert_eq!(cursor.cursor(), pos(1, 0));
     }
 }

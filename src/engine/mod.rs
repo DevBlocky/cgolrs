@@ -185,3 +185,74 @@ impl Iterator for NextGenBand<'_> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pos(x: i32, y: i32) -> Pos2 {
+        Pos2 { x, y }
+    }
+
+    fn sorted(mut positions: Vec<Pos2>) -> Vec<Pos2> {
+        positions.sort();
+        positions.dedup();
+        positions
+    }
+
+    #[test]
+    fn block_is_stable() {
+        let alive = sorted(vec![pos(1, 1), pos(2, 1), pos(1, 2), pos(2, 2)]);
+        let mut game = GameOfLife::from_alive(alive.clone());
+
+        game.next_generation();
+
+        assert_eq!(game.take(), alive);
+    }
+
+    #[test]
+    fn blinker_oscillates() {
+        let start = sorted(vec![pos(1, 0), pos(1, 1), pos(1, 2)]);
+        let mid = sorted(vec![pos(0, 1), pos(1, 1), pos(2, 1)]);
+        let mut game = GameOfLife::from_alive(start.clone());
+
+        game.next_generation();
+        assert_eq!(game.alive, mid);
+
+        game.next_generation();
+        assert_eq!(game.alive, start);
+    }
+
+    #[test]
+    fn parallel_matches_serial() {
+        let alive = sorted(vec![
+            pos(1, 0),
+            pos(2, 1),
+            pos(0, 2),
+            pos(1, 2),
+            pos(2, 2),
+            pos(4, 4),
+            pos(5, 4),
+            pos(6, 4),
+            pos(5, 5),
+        ]);
+        let mut serial = GameOfLife::from_alive(alive.clone());
+        let mut parallel = GameOfLife::from_alive(alive);
+
+        serial.next_generation();
+        parallel.next_generation_parallel();
+
+        assert_eq!(serial.take(), parallel.take());
+    }
+
+    #[test]
+    fn window_filters_positions() {
+        let alive = sorted(vec![pos(-1, 0), pos(0, 0), pos(1, 1), pos(2, 2)]);
+        let game = GameOfLife::from_alive(alive);
+        let window = game.window(pos(0, 0), pos(2, 2));
+
+        let collected: Vec<Pos2> = window.iter().copied().collect();
+
+        assert_eq!(collected, vec![pos(0, 0), pos(1, 1)]);
+    }
+}

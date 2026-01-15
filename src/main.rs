@@ -1,36 +1,23 @@
 use std::{io, thread};
 
 mod console;
-mod enc;
-mod engine;
 mod options;
-mod pos;
 mod stats;
 
-use pos::Pos2;
-use stats::Recorder;
+use crate::stats::Recorder;
+use cgolrs::{Pos2, enc, engine};
 
 fn args_to_alive(args: &options::Args) -> Vec<Pos2> {
     if let Some(file_name) = args.input_file() {
-        let decoder = enc::RunLengthEncoded::default();
+        let codec = enc::RunLengthEncoded::default();
         let encoded_str = std::fs::read_to_string(file_name).unwrap();
-        return enc::PositionEncoder::decode(decoder, &encoded_str);
+        return enc::Codec::decode(codec, &encoded_str);
     }
 
     // setup the alive cells based on args
     let (grid_w, grid_h) = args.grid_size();
-    let mut alive = Vec::new();
-    for y in 0..grid_h {
-        for x in 0..grid_w {
-            if args.fill_is_alive(x, y) {
-                alive.push(Pos2 {
-                    x: x as i32,
-                    y: y as i32,
-                });
-            }
-        }
-    }
-    alive
+    let fill = args.fill_mode();
+    fill.create_alive(grid_w, grid_h)
 }
 
 fn main() -> io::Result<()> {
@@ -43,15 +30,15 @@ fn main() -> io::Result<()> {
 
     // setup the engine and reporting metrics
     let mut game = engine::GameOfLife::from_alive(alive);
-    let mut console = if args.console() {
-        Some(console::ConsoleRender::new()?)
-    } else {
-        None
-    };
+    let mut console = args
+        .console()
+        .then(|| console::ConsoleRender::new())
+        .transpose()?;
+    let mut stats = stats::SwitchRecorder::new(game.alive_count(), args.stats_file().is_some());
     let sleep = args.sleep();
     let parallel = args.multithreading();
 
-    let mut stats = stats::CsvRecord::new(game.alive_count());
+    // main loop
     'generations: for _ in 0..args.generations() {
         // render the console if in console mode
         if let Some(ref mut console) = console {
@@ -65,7 +52,7 @@ fn main() -> io::Result<()> {
         }
 
         // report metrics every 500ms or always if in console mode
-        if stats.has_report(console.is_some()) {
+        if console.is_some() || stats.has_report() {
             let report = stats.report();
             if let Some(ref mut console) = console {
                 console.set_report(report);
@@ -87,10 +74,15 @@ fn main() -> io::Result<()> {
     }
     std::mem::drop(console);
 
+    // save output file
     if let Some(file_name) = args.output_file() {
         let encoder = enc::RunLengthEncoded::default().set_name("cgol_sim generated pattern");
-        let encoded_game = enc::PositionEncoder::encode(encoder, &game.take());
+        let encoded_game = enc::Codec::encode(encoder, &game.take());
         std::fs::write(file_name, encoded_game).expect("write encoded game to file");
+    }
+    // save stats file
+    if let Some(stats_file) = args.stats_file() {
+        stats.save(stats_file).expect("write stats csv to file");
     }
 
     Ok(())

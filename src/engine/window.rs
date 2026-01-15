@@ -47,3 +47,30 @@ impl<'a> std::fmt::Display for GameEngineWindow<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pos::Pos2;
+
+    fn pos(x: i32, y: i32) -> Pos2 {
+        Pos2 { x, y }
+    }
+
+    fn sorted(mut positions: Vec<Pos2>) -> Vec<Pos2> {
+        positions.sort();
+        positions.dedup();
+        positions
+    }
+
+    #[test]
+    fn iter_respects_bounds() {
+        let alive = sorted(vec![pos(0, 0), pos(1, 1), pos(2, 2)]);
+        let game = GameOfLife::from_alive(alive);
+        let window = GameEngineWindow::new(&game, pos(0, 0), pos(2, 2));
+
+        let collected: Vec<Pos2> = window.iter().copied().collect();
+
+        assert_eq!(collected, vec![pos(0, 0), pos(1, 1)]);
+    }
+}

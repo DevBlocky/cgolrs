@@ -1,6 +1,6 @@
 use crate::pos::Pos2;
 
-pub trait PositionEncoder {
+pub trait Codec {
     fn encode(self, positions: &[Pos2]) -> String;
     fn decode(self, value: &str) -> Vec<Pos2>;
 }
@@ -106,7 +106,7 @@ impl Default for RunLengthEncoded {
     }
 }
 
-impl PositionEncoder for RunLengthEncoded {
+impl Codec for RunLengthEncoded {
     fn encode(self, cells: &[Pos2]) -> String {
         format!("{}\n{}\n", self.encode_header(), self.encode_cells(cells))
     }
@@ -142,5 +142,47 @@ impl PositionEncoder for RunLengthEncoded {
         }
 
         alive
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pos::Pos2;
+
+    fn pos(x: i32, y: i32) -> Pos2 {
+        Pos2 { x, y }
+    }
+
+    fn sorted(mut positions: Vec<Pos2>) -> Vec<Pos2> {
+        positions.sort();
+        positions.dedup();
+        positions
+    }
+
+    #[test]
+    fn round_trip_encode_decode() {
+        let alive = sorted(vec![pos(0, 0), pos(1, 0), pos(3, 1), pos(2, 3)]);
+        let encoded = RunLengthEncoded::default().encode(&alive);
+        let decoded = RunLengthEncoded::default().decode(&encoded);
+
+        assert_eq!(decoded, alive);
+    }
+
+    #[test]
+    fn decode_parses_header_and_runs() {
+        let encoded = "#N demo\nx = 0, y = 0, rule = 23/3\n3o$2bo!";
+        let decoded = RunLengthEncoded::default().decode(encoded);
+
+        assert_eq!(decoded, vec![pos(0, 0), pos(1, 0), pos(2, 0), pos(2, 1)]);
+    }
+
+    #[test]
+    fn encode_includes_name_when_set() {
+        let encoded = RunLengthEncoded::default()
+            .set_name("pattern")
+            .encode(&[pos(0, 0)]);
+
+        assert!(encoded.contains("#N pattern"));
     }
 }

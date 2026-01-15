@@ -1,9 +1,8 @@
-use crate::{engine::GameOfLife, Pos2};
+use cgolrs::{Pos2, engine::GameOfLife};
 use crossterm::{
     cursor,
     event::{self, KeyCode, KeyEvent, KeyModifiers},
-    queue, terminal,
-    execute,
+    execute, queue, terminal,
 };
 use std::io;
 
@@ -65,12 +64,7 @@ impl ConsoleRender {
                 outp = Ok(Some(ConsoleCommand::Exit));
             }
             // arrows to move grid
-            event::Event::Key(
-                ev @ KeyEvent {
-                    code: KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right,
-                    ..
-                },
-            ) => match ev.code {
+            event::Event::Key(ev) => match ev.code {
                 KeyCode::Up => self.tl.y -= 1,
                 KeyCode::Down => self.tl.y += 1,
                 KeyCode::Left => self.tl.x -= 1,

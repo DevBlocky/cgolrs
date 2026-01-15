@@ -8,7 +8,7 @@ type GameOfLifeIndex = [bool; PERMUTATIONS];
 ///
 /// Equivalent to calling [`generate_gol_index`] once and storing the result
 pub(super) fn get_gol_index() -> &'static GameOfLifeIndex {
-    static CELL: OnceLock<[bool; PERMUTATIONS]> = OnceLock::new();
+    static CELL: OnceLock<GameOfLifeIndex> = OnceLock::new();
     CELL.get_or_init(generate_gol_index)
 }
 
@@ -31,4 +31,44 @@ pub(super) fn generate_gol_index() -> GameOfLifeIndex {
         };
     }
     indices
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grid_value(alive: bool, neighbors: usize) -> usize {
+        const CENTER: usize = 0b000_010_000;
+        const NEIGHBOR_BITS: [usize; 8] = [
+            0b000_000_001,
+            0b000_000_010,
+            0b000_000_100,
+            0b000_001_000,
+            0b000_100_000,
+            0b001_000_000,
+            0b010_000_000,
+            0b100_000_000,
+        ];
+
+        let mut value = if alive { CENTER } else { 0 };
+        for bit in NEIGHBOR_BITS.iter().take(neighbors) {
+            value |= bit;
+        }
+        value
+    }
+
+    #[test]
+    fn rules_match_conway_life() {
+        let index = generate_gol_index();
+
+        assert!(index[grid_value(true, 2)]);
+        assert!(index[grid_value(true, 3)]);
+        assert!(index[grid_value(false, 3)]);
+
+        assert!(!index[grid_value(true, 0)]);
+        assert!(!index[grid_value(true, 1)]);
+        assert!(!index[grid_value(true, 4)]);
+        assert!(!index[grid_value(false, 2)]);
+        assert!(!index[grid_value(false, 4)]);
+    }
 }
